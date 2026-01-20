@@ -8,3 +8,8 @@ export const useBudget = () => {
     }
     return context
 }
+
+// implementación de validación de un número
+export function validNumber(value: string): string {
+    return value.replace(/^0+(?!\.|$)/, '');
+}
