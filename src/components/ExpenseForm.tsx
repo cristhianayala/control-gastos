@@ -2,13 +2,14 @@ import { categories } from "../data/categories";
 import DatePicker from 'react-date-picker';
 import 'react-date-picker/dist/DatePicker.css';
 import 'react-calendar/dist/Calendar.css';
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type { DraftExpense, Value } from "../types";
 import ErrorMessage from "./ErrorMessage";
 import { useBudget } from "../hooks/useBudget";
-import SuccessMessage from "./SuccessMessage";
 
 export default function ExpenseForm() {
+    
+    const {dispatch, state, remainingBudget} = useBudget()
 
     const [expense, setExpense] = useState<DraftExpense>({
         expenseName: '',
@@ -17,11 +18,17 @@ export default function ExpenseForm() {
         date: new Date()
     })
 
-    const {dispatch} = useBudget()
-
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+    const [previousAmount, setPreviousAmount] = useState(0)
 
+    useEffect(()=> {
+        if(state.editingId) {
+            const editingExpense = state.expenses.filter(currentExpense => currentExpense.id === state.editingId)[0]
+            setExpense(editingExpense)
+            setPreviousAmount(editingExpense.amount)
+        }
+    }, [state.editingId])
+    
     const handleChange = (e: ChangeEvent<HTMLInputElement> | ChangeEvent<HTMLSelectElement>) => {
         const {name, value} = e.target
         const isAmountField = ['amount'].includes(name)
@@ -40,32 +47,46 @@ export default function ExpenseForm() {
 
     const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
-        if(Object.values(expense).includes('')) {
+
+        //validar todos los campos
+        if(Object.values(expense).includes('') || expense.amount <= 0) {
             setError('Todos los campos son obligatorios')
             setTimeout(()=>{
                 setError('')
             }, 1200)
             return
         }
-        setSuccess('Registro exitoso')
-        setTimeout(()=> {
-            setSuccess('')
-        }, 1000)
 
-        dispatch({type: 'add-expense', payload: {expense}})
+        //validar que no se pase del límite
+        if((expense.amount - previousAmount) > remainingBudget) {
+            setError('El gasto supera el presupuesto')
+            setTimeout(()=>{
+                setError('')
+            }, 1200)
+            return
+        }
+
+        // Agregar/Actualizar gasto
+        if(state.editingId) {
+            dispatch({type: 'update-expense', payload:{expense: {id:state.editingId, ...expense}}})
+        } else {
+            dispatch({type: 'add-expense', payload:{expense}})
+        }
+        
+        //reiniciar state
         setExpense({
         expenseName: '',
         amount: 0,
         category: '',
         date: new Date()
-    })
+        })
+        setPreviousAmount(0)
     }
 
     return (
         <form className="space-y-5" onSubmit={handleSubmit}>
             <legend className="uppercase text-center text-2xl font-bold border-b-3 border-blue-600 pb-3"
-            >Nuevo Gasto</legend>
-            {success && <SuccessMessage>{success}</SuccessMessage>}
+            >{state.editingId ? 'Modificar Gasto' : 'Nuevo Gasto'}</legend>
             {error && <ErrorMessage>{error}</ErrorMessage>}
             <div className="flex flex-col gap-2">
                 <label
@@ -135,7 +156,7 @@ export default function ExpenseForm() {
 
             <input
                 type="submit"
-                value={'Registrar Gasto'}
+                value={state.editingId ? 'Guardar cambios' : 'Registrar gasto' }
                 className="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded-lg text-white font-bold uppercase cursor-pointer"
             />
         </form>
